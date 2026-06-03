@@ -1412,6 +1412,98 @@ async def test_non_streaming_does_not_pass_stream_param():
   assert "stream" not in kwargs
 
 
+@pytest.mark.asyncio
+async def test_non_streaming_omits_system_when_system_instruction_is_none():
+  """When system_instruction is None, system param must be NOT_GIVEN, not None."""
+  from anthropic import NOT_GIVEN
+
+  llm = AnthropicLlm(model="claude-sonnet-4-20250514")
+
+  mock_message = anthropic_types.Message(
+      id="msg_test",
+      content=[
+          anthropic_types.TextBlock(text="Hello!", type="text", citations=None)
+      ],
+      model="claude-sonnet-4-20250514",
+      role="assistant",
+      stop_reason="end_turn",
+      stop_sequence=None,
+      type="message",
+      usage=anthropic_types.Usage(
+          input_tokens=5,
+          output_tokens=2,
+          cache_creation_input_tokens=0,
+          cache_read_input_tokens=0,
+          server_tool_use=None,
+          service_tier=None,
+      ),
+  )
+
+  mock_client = MagicMock()
+  mock_client.messages.create = AsyncMock(return_value=mock_message)
+
+  llm_request = LlmRequest(
+      model="claude-sonnet-4-20250514",
+      contents=[Content(role="user", parts=[Part.from_text(text="Hi")])],
+      config=types.GenerateContentConfig(),
+  )
+
+  with mock.patch.object(llm, "_anthropic_client", mock_client):
+    _ = [r async for r in llm.generate_content_async(llm_request, stream=False)]
+
+  _, kwargs = mock_client.messages.create.call_args
+  assert kwargs["system"] is NOT_GIVEN
+
+
+@pytest.mark.asyncio
+async def test_streaming_omits_system_when_system_instruction_is_none():
+  """When system_instruction is None, streaming also passes NOT_GIVEN, not None."""
+  from anthropic import NOT_GIVEN
+
+  llm = AnthropicLlm(model="claude-sonnet-4-20250514")
+
+  events = [
+      MagicMock(
+          type="message_start",
+          message=MagicMock(usage=MagicMock(input_tokens=5, output_tokens=0)),
+      ),
+      MagicMock(
+          type="content_block_start",
+          index=0,
+          content_block=anthropic_types.TextBlock(text="", type="text"),
+      ),
+      MagicMock(
+          type="content_block_delta",
+          index=0,
+          delta=anthropic_types.TextDelta(text="Hi", type="text_delta"),
+      ),
+      MagicMock(type="content_block_stop", index=0),
+      MagicMock(
+          type="message_delta",
+          delta=MagicMock(stop_reason="end_turn"),
+          usage=MagicMock(output_tokens=1),
+      ),
+      MagicMock(type="message_stop"),
+  ]
+
+  mock_client = MagicMock()
+  mock_client.messages.create = AsyncMock(
+      return_value=_make_mock_stream_events(events)
+  )
+
+  llm_request = LlmRequest(
+      model="claude-sonnet-4-20250514",
+      contents=[Content(role="user", parts=[Part.from_text(text="Hi")])],
+      config=types.GenerateContentConfig(),
+  )
+
+  with mock.patch.object(llm, "_anthropic_client", mock_client):
+    _ = [r async for r in llm.generate_content_async(llm_request, stream=True)]
+
+  _, kwargs = mock_client.messages.create.call_args
+  assert kwargs["system"] is NOT_GIVEN
+
+
 def test_part_to_message_block_function_call_preserves_valid_id():
   """Valid Anthropic ids must round-trip byte-for-byte."""
   part = types.Part.from_function_call(name="test_tool", args={"k": "v"})

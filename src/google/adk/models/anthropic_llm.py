@@ -557,7 +557,9 @@ class AnthropicLlm(BaseLlm):
     if not stream:
       message = await self._anthropic_client.messages.create(
           model=model_to_use,
-          system=llm_request.config.system_instruction,
+          system=llm_request.config.system_instruction
+          if llm_request.config.system_instruction is not None
+          else NOT_GIVEN,
           messages=messages,
           tools=tools,
           tool_choice=tool_choice,
@@ -591,7 +593,9 @@ class AnthropicLlm(BaseLlm):
     model_to_use = self._resolve_model_name(llm_request.model)
     raw_stream = await self._anthropic_client.messages.create(
         model=model_to_use,
-        system=llm_request.config.system_instruction,
+        system=llm_request.config.system_instruction
+        if llm_request.config.system_instruction is not None
+        else NOT_GIVEN,
         messages=messages,
         tools=tools,
         tool_choice=tool_choice,
